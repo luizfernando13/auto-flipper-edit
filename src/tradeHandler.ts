@@ -1,7 +1,7 @@
 import { MyBot, TradeData } from '../types/autobuy'
-import { getCurrentWebsocket } from './BAF'
 import { log } from './logger'
 import { clickWindow, sleep } from './utils'
+import { getCurrentWebsocket } from './BAF'
 
 export async function tradePerson(bot: MyBot, data: TradeData) {
     let wss = await getCurrentWebsocket()

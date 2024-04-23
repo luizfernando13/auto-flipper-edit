@@ -1,57 +1,49 @@
 import readline from 'readline'
 import { getConfigProperty } from './configHelper'
+import { sleep, clickWindow } from './utils'
 import { MyBot } from '../types/autobuy'
 import { changeWebsocketURL, getCurrentWebsocket } from './BAF'
 import { claimPurchased } from './ingameMessageHandler'
-import { printMcChatToConsole } from './logger'
-import { sleep } from './utils'
+import { printMcChatToConsole } from './logger';
 
-let consoleSetupFinished = false
+export async function processInput(bot: MyBot, input: string) {
+    let ws = await getCurrentWebsocket()
+    let lowercaseInput = input.toLowerCase()
+    if ((lowercaseInput?.startsWith('/visit')) && input?.split(' ').length >= 2) {
+        // outdated command 
+        let window = bot.currentWindow;
 
-export function setupConsoleInterface(bot: MyBot) {
-    if (!getConfigProperty('ENABLE_CONSOLE_INPUT') || consoleSetupFinished) {
+        bot.state = 'purchasing'
+        if (window) {
+            bot.closeWindow(window)
+        }
+        await sleep(1000)
+        bot.chat(input)
+        await sleep(5000)
+        let window2 = bot.currentWindow;
+        let items = window2.containerItems();
+        console.log(items)
+        printMcChatToConsole(`${items}`)
+        items = items.filter(item => item.name !== 'black_stained_glass_pane');
+        clickWindow(bot, 11)
+        clickWindow(bot, 13)
+        await sleep(2000)
+        bot.removeAllListeners('windowOpen')
+        bot.state = null
+        bot.closeWindow(window2)
         return
     }
-    consoleSetupFinished = true
-
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    })
-
-    rl.on('line', async input => {
-        let ws = await getCurrentWebsocket()
-        let lowercaseInput = input.toLowerCase()
-        if ((lowercaseInput?.startsWith('/cofl') || lowercaseInput?.startsWith('/baf')) && lowercaseInput?.split(' ').length >= 2) {
-            handleCommand(bot, input)
-            return
-        }
-        if (input?.startsWith('/')) {
-            bot.chat(input)
-            return
-        }
-        ws.send(
-            JSON.stringify({
-                type: 'chat',
-                data: `"${input}"`
-            })
-        )
-    })
-}
-
-export async function handleCommand(bot: MyBot, data: string) {
-    let wss = await getCurrentWebsocket()
-    let lowercaseInput = data.toLowerCase()
-    if ((lowercaseInput?.startsWith('/cofl') || lowercaseInput?.startsWith('/baf')) && data?.split(' ').length >= 2) {
-        let splits = data.split(' ')
+    else if ((lowercaseInput?.startsWith('/cofl') || input?.startsWith('/baf')) && input?.split(' ').length >= 2) {
+        let splits = input.split(' ')
         splits.shift() // remove /cofl
-        let command = splits.shift()
+        let command = splits.shift().toLowerCase()
 
         if (command === 'connect') {
+            console.log(splits[0])
             changeWebsocketURL(splits[0])
             return
         }
-        if (command === 'forceClaim') {
+        if (command === 'forceclaim') {
             printMcChatToConsole(`§f[§4BAF§f]: §fForce claiming...`)
             let canStillClaim = true
             while (canStillClaim) {
@@ -67,13 +59,37 @@ export async function handleCommand(bot: MyBot, data: string) {
             return
         }
 
-        wss.send(
+        ws.send(
             JSON.stringify({
                 type: command,
                 data: `"${splits.join(' ')}"`
             })
         )
-    } else {
-        bot.chat(data)
     }
+    else {
+        bot.chat(input)
+    }
+}
+
+let consoleSetupFinished = false
+
+export function setupConsoleInterface(bot: MyBot) {
+    if (!getConfigProperty('ENABLE_CONSOLE_INPUT') || consoleSetupFinished) {
+        return
+    }
+    consoleSetupFinished = true
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    })
+    rl.on('line', async input => {
+        let ws = await getCurrentWebsocket()
+        if ((input?.startsWith('/') && !input?.startsWith('/cofl')) && input?.split(' ').length >= 2) {
+            bot.chat(input)
+        }
+        else {
+            processInput(bot, input);
+        }
+    })
 }

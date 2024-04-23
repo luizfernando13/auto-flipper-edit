@@ -1,25 +1,28 @@
+import { ScoreBoard } from 'mineflayer'
 import { createBot } from 'mineflayer'
 import { createFastWindowClicker } from './fastWindowClick'
 import { addLoggerToClientWriteFunction, initLogger, log, printMcChatToConsole } from './logger'
-import { clickWindow, isCoflChatMessage, sleep } from './utils'
+import { clickWindow, isCoflChatMessage, removeMinecraftColorCodes, sleep } from './utils'
 import { onWebsocketCreateAuction } from './sellHandler'
 import { tradePerson } from './tradeHandler'
 import { swapProfile } from './swapProfileHandler'
-import { flipHandler } from './flipHandler'
+import { flipHandler, registerIngameMessage } from './flipHandler'
 import { claimSoldItem, registerIngameMessageHandler } from './ingameMessageHandler'
 import { MyBot, TextMessageData } from '../types/autobuy'
 import { getConfigProperty, initConfigHelper, updatePersistentConfigProperty } from './configHelper'
 import { getSessionId } from './coflSessionManager'
-import { sendWebhookInitialized } from './webhookHandler'
-import { handleCommand, setupConsoleInterface } from './consoleHandler'
+import { sendWebhookInitialized, SendWebhookTotals, DisconnectWebwook, webhookInterval } from './webhookHandler'
+import { processInput, setupConsoleInterface } from './consoleHandler'
 import { initAFKHandler, tryToTeleportToIsland } from './AFKHandler'
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws')
 var prompt = require('prompt-sync')()
 initConfigHelper()
 initLogger()
 const version = '1.5.1-af'
 let _websocket: WebSocket
-let ingameName = getConfigProperty('INGAME_NAME')
+let ingameName = getConfigProperty('INGAME_NAME');
 
 if (!ingameName) {
     ingameName = prompt('Enter your ingame name: ')
@@ -54,36 +57,40 @@ bot.once('login', () => {
                 })
             )
             printMcChatToConsole('§f[§4BAF§f]: §fYou were disconnected from the server...')
-            printMcChatToConsole('§f[§4BAF§f]: §f' + JSON.stringify(packet))
+            packet = JSON.parse(JSON.stringify(packet));
+            let reason = JSON.parse(packet.reason);
+            let text = reason.extra[0].text;
+            DisconnectWebwook(text)
+            printMcChatToConsole('§f[§4BAF§f]: §f' + text)
         }
     })
 })
-
 bot.once('spawn', async () => {
     await bot.waitForChunksToLoad()
     await sleep(2000)
     bot.chat('/play sb')
     bot.on('scoreboardTitleChanged', onScoreboardChanged)
     registerIngameMessageHandler(bot)
+    registerIngameMessage(bot)
 })
 
 function connectWebsocket(url: string = getConfigProperty('WEBSOCKET_URL')) {
     _websocket = new WebSocket(`${url}?player=${ingameName}&version=${version}&SId=${getSessionId(ingameName)}`)
     _websocket.onopen = function () {
         setupConsoleInterface(bot)
-        sendWebhookInitialized()
         updatePersistentConfigProperty('WEBSOCKET_URL', url)
     }
     _websocket.onmessage = onWebsocketMessage
     _websocket.onclose = function (e) {
-        printMcChatToConsole('§f[§4BAF§f]: §4Connection closed. Reconnecting...')
         log('Connection closed. Reconnecting... ', 'warn')
+        printMcChatToConsole('§f[§4BAF§f]: §4WS Connection closed. Reconnecting... ')
         setTimeout(function () {
             connectWebsocket()
         }, 1000)
     }
     _websocket.onerror = function (err) {
         log('Connection error: ' + JSON.stringify(err), 'error')
+        printMcChatToConsole('§f[§4BAF§f]: §4WS Connection error: ' + JSON.stringify(err))
         _websocket.close()
     }
 }
@@ -100,6 +107,11 @@ async function onWebsocketMessage(msg) {
         case 'chatMessage':
             for (let da of [...(data as TextMessageData[])]) {
                 let isCoflChat = isCoflChatMessage(da.text)
+                if (da.text.startsWith("Your") && da.text.includes("connection id is")) {
+                    let textmsg = da.text.replace(',', '').split(' ');
+                    let ID = textmsg[4]
+                    sendWebhookInitialized(ID)
+                }
                 if (!isCoflChat) {
                     log(message, 'debug')
                 }
@@ -148,7 +160,7 @@ async function onWebsocketMessage(msg) {
             break
         case 'execute':
             log(message, 'debug')
-            handleCommand(bot, data)
+            processInput(bot, data)
             break
         case 'privacySettings':
             log(message, 'debug')
@@ -187,6 +199,81 @@ async function onScoreboardChanged() {
     }
 }
 
+let executed = true;
+async function sendWebhookTotalsMSG(buyTotal: number, soldTotal: number) {
+    if (executed) {
+        const filePath = path.join(__dirname, 'totals.txt');
+
+        if (!fs.existsSync(filePath)) {
+            fs.writeFileSync(filePath, 'buy_total=0\nsold_total=0');
+        }
+
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        const lines = fileContent.split('\n');
+
+        for (const line of lines) {
+            const [key, value] = line.split('=');
+            if (key === 'buy_total') {
+                buyTotal = parseInt(value, 10);
+            } else if (key === 'sold_total') {
+                soldTotal = parseInt(value, 10);
+            }
+        }
+        
+        await SendWebhookTotals(buyTotal, soldTotal);
+
+        const fileContent2 = `buy_total=0\nsold_total=0`;
+        fs.writeFileSync(filePath, fileContent2);
+        executed = false;
+    }
+}
+
+sendWebhookTotalsMSG(0, 0);
+
+const startSession = (Date.now() / 1000).toFixed(0)
+
+function formatNumber(num) {
+    if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(2) + 'B';
+    }
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(2) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(2) + 'K';
+    }
+    return num;
+}
+
+
+async function updateSession(buyTotal: number, soldTotal: number) {
+    const filePath = path.join(__dirname, 'totals.txt');
+
+    if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, 'buy_total=0\nsold_total=0');
+    }
+
+    setInterval(async () => {
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        const lines = fileContent.split('\n');
+        let test = bot.scoreboard.sidebar.items.map(item => item.displayName.getText(null).replace(item.name, '')).find(e => e.includes('Purse:') || e.includes('Piggy:'))
+        let purse = test.replace('Purse: ', '').replace(/,/g, '');
+        purse = formatNumber(Number(purse));
+
+        for (const line of lines) {
+            const [key, value] = line.split('=');
+            if (key === 'buy_total') {
+                buyTotal = parseInt(value, 10);
+            } else if (key === 'sold_total') {
+                soldTotal = parseInt(value, 10);
+            }
+        }
+        
+        await webhookInterval(buyTotal, soldTotal, startSession, purse);
+    }, 30 * 60 * 1000);
+}
+updateSession(0, 0);
+
 export function changeWebsocketURL(newURL: string) {
     _websocket.onclose = () => {}
     _websocket.close()
@@ -209,3 +296,4 @@ export async function getCurrentWebsocket(): Promise<WebSocket> {
         resolve(socket)
     })
 }
+

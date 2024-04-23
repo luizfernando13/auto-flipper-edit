@@ -2,10 +2,19 @@ import { MyBot } from '../types/autobuy'
 import { log, printMcChatToConsole } from './logger'
 import { clickWindow, getWindowTitle } from './utils'
 import { ChatMessage } from 'prismarine-chat'
-import { sendWebhookItemPurchased, sendWebhookItemSold } from './webhookHandler'
+import { sendWebhookItemSold } from './webhookHandler'
 import { getCurrentWebsocket } from './BAF'
+const fs = require('fs');
+const path = require('path');
 
-// if nothing gets bought for 1 hours, send a report
+let buy_total = 0;  
+let sold_total = 0;
+
+function updateFile() {
+    const filePath = path.join(__dirname, 'totals.txt');
+    fs.writeFileSync(filePath, `buy_total=${buy_total}\nsold_total=${sold_total}`);
+}
+
 let errorTimeout
 
 export async function registerIngameMessageHandler(bot: MyBot) {
@@ -15,25 +24,17 @@ export async function registerIngameMessageHandler(bot: MyBot) {
         if (type == 'chat') {
             printMcChatToConsole(message.toAnsi())
             if (text.startsWith('You purchased')) {
-                wss.send(
-                    JSON.stringify({
-                        type: 'uploadTab',
-                        data: JSON.stringify(Object.keys(bot.players).map(playername => bot.players[playername].displayName.getText(null)))
-                    })
-                )
-                wss.send(
-                    JSON.stringify({
-                        type: 'uploadScoreboard',
-                        data: JSON.stringify(bot.scoreboard.sidebar.items.map(item => item.displayName.getText(null).replace(item.name, '')))
-                    })
-                )
-                claimPurchased(bot)
-
-                sendWebhookItemPurchased(text.split(' purchased ')[1].split(' for ')[0], text.split(' for ')[1].split(' coins!')[0])
-                setNothingBoughtFor1HourTimeout(wss)
+                buy_total += 1;
+                setTimeout(() => {
+                    updateFile()
+                }, 100)
             }
             if (text.startsWith('[Auction]') && text.includes('bought') && text.includes('for')) {
                 log('New item sold')
+                sold_total += 1;
+                setTimeout(() => {
+                    updateFile()
+                }, 100)
                 claimSoldItem(bot)
 
                 sendWebhookItemSold(
@@ -51,8 +52,7 @@ export async function registerIngameMessageHandler(bot: MyBot) {
                 )
             }
         }
-    })
-
+    })  
     setNothingBoughtFor1HourTimeout(wss)
 }
 
@@ -75,37 +75,37 @@ export function claimPurchased(bot: MyBot, useCollectAll: boolean = true): Promi
             resolve(false)
         }, 5000)
 
-        bot.on('windowOpen', async window => {
-            let title = getWindowTitle(window)
-            log('Claiming auction window: ' + title)
+    bot.on('windowOpen', async window => {
+        let title = getWindowTitle(window)
+        log('Claiming auction window: ' + title)
 
-            if (title.toString().includes('Auction House')) {
-                clickWindow(bot, 13)
-            }
+        if (title.toString().includes('Auction House')) {
+            clickWindow(bot, 13)
+        }
 
-            if (title.toString().includes('Your Bids')) {
-                let slotToClick = -1
-                for (let i = 0; i < window.slots.length; i++) {
-                    const slot = window.slots[i]
-                    let name = (slot?.nbt as any)?.value?.display?.value?.Name?.value?.toString()
-                    if (useCollectAll && slot?.type === 380 && name?.includes('Claim') && name?.includes('All')) {
-                        log('Found cauldron to claim all purchased auctions -> clicking index ' + i)
-                        clickWindow(bot, i)
-                        bot.removeAllListeners('windowOpen')
-                        bot.state = null
-                        clearTimeout(timeout)
-                        resolve(true)
-                        return
-                    }
-                    let lore = (slot?.nbt as any)?.value?.display?.value?.Lore?.value?.value?.toString()
-                    if (lore?.includes('Status:') && lore?.includes('Sold!')) {
-                        log('Found claimable purchased auction. Gonna click index ' + i)
-                        log(JSON.stringify(slot))
-                        slotToClick = i
-                    }
+        if (title.toString().includes('Your Bids')) {
+            let slotToClick = -1
+            for (let i = 0; i < window.slots.length; i++) {
+                const slot = window.slots[i]
+                let name = (slot?.nbt as any)?.value?.display?.value?.Name?.value?.toString()
+                if (useCollectAll && slot?.type === 380 && name?.includes('Claim') && name?.includes('All')) {
+                    log('Found cauldron to claim all purchased auctions -> clicking index ' + i)
+                    clickWindow(bot, i)
+                    bot.removeAllListeners('windowOpen')
+                    bot.state = null
+                    clearTimeout(timeout)
+                    resolve(true)
+                    return
                 }
-                if (slotToClick === -1) {
-                    log('No claimable purchased auction found')
+                let lore = (slot?.nbt as any)?.value?.display?.value?.Lore?.value?.value?.toString()
+                if (lore?.includes('Status:') && lore?.includes('Sold!')) {
+                    log('Found claimable purchased auction. Gonna click index ' + i)
+                    log(JSON.stringify(slot))
+                    slotToClick = i
+                }
+            }
+            if (slotToClick === -1) {
+                log('No claimable purchased auction found')
                     bot.removeAllListeners('windowOpen')
                     bot.state = null
                     bot.closeWindow(window)
@@ -113,11 +113,11 @@ export function claimPurchased(bot: MyBot, useCollectAll: boolean = true): Promi
                     resolve(false)
                     return
                 }
-                clickWindow(bot, slotToClick)
-            }
+            clickWindow(bot, slotToClick)
+        }
 
-            if (title.toString().includes('BIN Auction View')) {
-                log('Claiming purchased auction...')
+        if (title.toString().includes('BIN Auction View')) {
+            log('Claiming purchased auction...')
                 bot.removeAllListeners('windowOpen')
                 bot.state = null
                 clearTimeout(timeout)
@@ -173,34 +173,35 @@ export async function claimSoldItem(bot: MyBot): Promise<boolean> {
                         resolve(true)
                         return
                     }
-                }
-
-                if (!clickSlot) {
-                    log('No sold auctions found')
-                    clearTimeout(timeout)
-                    bot.removeAllListeners('windowOpen')
-                    bot.state = null
-                    bot.closeWindow(window)
-                    resolve(false)
-                    return
-                }
-                log('Clicking auction to claim, index: ' + clickSlot)
-                log(JSON.stringify(window.slots[clickSlot]))
-
-                clickWindow(bot, clickSlot)
             }
-            if (title == 'BIN Auction View') {
-                log('Clicking slot 31, claiming purchased auction')
-                clickWindow(bot, 31)
+
+            if (!clickSlot) {
+                log('No sold auctions found')
+                printMcChatToConsole('§f[§4BAF§f]: §l§cSomething is wrong while trying to claim sold auctions. Maybe not have auctions to claim!')
                 clearTimeout(timeout)
                 bot.removeAllListeners('windowOpen')
                 bot.state = null
                 bot.closeWindow(window)
-                resolve(true)
+                    resolve(false)
+                return
             }
+            log('Clicking auction to claim, index: ' + clickSlot)
+            log(JSON.stringify(window.slots[clickSlot]))
+
+            clickWindow(bot, clickSlot)
+        }
+        if (title == 'BIN Auction View') {
+            log('Clicking slot 31, claiming purchased auction')
+            clickWindow(bot, 31)
+            clearTimeout(timeout)
+            bot.removeAllListeners('windowOpen')
+            bot.state = null
+            resolve(true)
+        }
         })
     })
 }
+
 
 function setNothingBoughtFor1HourTimeout(wss: WebSocket) {
     if (errorTimeout) {

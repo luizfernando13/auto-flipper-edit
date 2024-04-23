@@ -1,15 +1,15 @@
 import { MyBot, SellData } from '../types/autobuy'
-import { getCurrentWebsocket } from './BAF'
 import { log, printMcChatToConsole } from './logger'
-import { clickWindow, getWindowTitle, numberWithThousandsSeparators, removeMinecraftColorCodes } from './utils'
+import { clickWindow, getWindowTitle, numberWithThousandsSeparators, removeMinecraftColorCodes, sleep } from './utils'
 import { sendWebhookItemListed } from './webhookHandler'
+import { getCurrentWebsocket } from './BAF'
 
 let setPrice = false
 let durationSet = false
 let retryCount = 0
 
 export async function onWebsocketCreateAuction(bot: MyBot, data: SellData) {
-    let ws = await getCurrentWebsocket()
+    let wss = await getCurrentWebsocket()
     if (bot.state) {
         log('Currently busy with something else (' + bot.state + ') -> not selling')
         if (retryCount > 10) {
@@ -25,10 +25,10 @@ export async function onWebsocketCreateAuction(bot: MyBot, data: SellData) {
     bot.state = 'selling'
     log('Selling item...')
     log(data)
-    sellItem(data, bot, ws)
+    sellItem(data, bot, wss)
 }
 
-async function sellItem(data: SellData, bot: MyBot, ws: WebSocket) {
+async function sellItem(data: SellData, bot: MyBot, wss: WebSocket) {
     let timeout = setTimeout(() => {
         log('Seems something went wrong while selling. Removing lock', 'warn')
         bot.state = null
@@ -36,7 +36,7 @@ async function sellItem(data: SellData, bot: MyBot, ws: WebSocket) {
     }, 10000)
 
     let handler = function (window: any) {
-        sellHandler(data, bot, window, ws, () => {
+        sellHandler(data, bot, window, wss, () => {
             clearTimeout(timeout)
             bot.removeAllListeners('windowOpen')
         })
@@ -48,7 +48,7 @@ async function sellItem(data: SellData, bot: MyBot, ws: WebSocket) {
 // Store the reason if the last sell attempt failed
 // If it happens again, send a error message to the backend
 let previousError
-async function sellHandler(data: SellData, bot: MyBot, sellWindow, ws: WebSocket, removeEventListenerCallback: Function) {
+async function sellHandler(data: SellData, bot: MyBot, sellWindow, wss: WebSocket, removeEventListenerCallback: Function) {
     let title = getWindowTitle(sellWindow)
     log(title)
     if (title.toString().includes('Auction House')) {
@@ -68,9 +68,11 @@ async function sellHandler(data: SellData, bot: MyBot, sellWindow, ws: WebSocket
                 clickSlot = item.slot
             }
         }
+        await sleep(5)
         clickWindow(bot, clickSlot)
     }
     if (title == 'Create Auction') {
+        await sleep(10)
         clickWindow(bot, 48)
     }
 
@@ -84,7 +86,7 @@ async function sellHandler(data: SellData, bot: MyBot, sellWindow, ws: WebSocket
             let itemSlot = data.slot - bot.inventory.inventoryStart + sellWindow.inventoryStart
             if (!sellWindow.slots[itemSlot]) {
                 if (previousError === 'Slot empty') {
-                    ws.send(
+                    wss.send(
                         JSON.stringify({
                             type: 'clientError',
                             data: { data, message: 'createAuction slot empty' }
@@ -102,7 +104,7 @@ async function sellHandler(data: SellData, bot: MyBot, sellWindow, ws: WebSocket
             let uuid = sellWindow.slots[itemSlot]?.nbt?.value?.ExtraAttributes?.value?.uuid?.value
             if (data.id !== id && data.id !== uuid) {
                 if (previousError === "Item doesn't match") {
-                    ws.send(
+                    wss.send(
                         JSON.stringify({
                             type: 'clientError',
                             data: { data, slot: JSON.stringify(sellWindow.slots[itemSlot]), message: 'createAuction item doesnt match' }
