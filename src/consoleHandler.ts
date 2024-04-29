@@ -10,7 +10,6 @@ export async function processInput(bot: MyBot, input: string) {
     let ws = await getCurrentWebsocket()
     let lowercaseInput = input.toLowerCase()
     if ((lowercaseInput?.startsWith('/visit')) && input?.split(' ').length >= 2) {
-        // outdated command 
         let window = bot.currentWindow;
 
         bot.state = 'purchasing'
@@ -19,11 +18,9 @@ export async function processInput(bot: MyBot, input: string) {
         }
         await sleep(1000)
         bot.chat(input)
-        await sleep(5000)
+        await sleep(1000)
         let window2 = bot.currentWindow;
         let items = window2.containerItems();
-        console.log(items)
-        printMcChatToConsole(`${items}`)
         items = items.filter(item => item.name !== 'black_stained_glass_pane');
         clickWindow(bot, 11)
         clickWindow(bot, 13)
@@ -67,7 +64,12 @@ export async function processInput(bot: MyBot, input: string) {
         )
     }
     else {
-        bot.chat(input)
+        ws.send(
+            JSON.stringify({
+                type: 'chat',
+                data: `"${input}"`
+            })
+        )
     }
 }
 
@@ -84,10 +86,9 @@ export function setupConsoleInterface(bot: MyBot) {
         output: process.stdout
     })
     rl.on('line', async input => {
-        let ws = await getCurrentWebsocket()
-        if ((input?.startsWith('/') && !input?.startsWith('/cofl')) && input?.split(' ').length >= 2) {
-            bot.chat(input)
-        }
+        if (input?.startsWith('/') && !/^\/(cofl|baf|visit)/.test(input)) {
+            bot.chat(input);
+        }        
         else {
             processInput(bot, input);
         }
