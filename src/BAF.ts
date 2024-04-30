@@ -246,33 +246,49 @@ function formatNumber(num) {
 }
 
 
-async function updateSession(buyTotal: number, soldTotal: number) {
+async function updateSession(buyTotal: number, soldTotal: number, flipsBedTotal: number, noBedsTotal: number) {
     const filePath = path.join(__dirname, 'totals.txt');
 
+
     if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, 'buy_total=0\nsold_total=0');
+        fs.writeFileSync(filePath, 'buy_total=0\nsold_total=0\nflips_bed=0\nno_beds=0');
     }
+
 
     setInterval(async () => {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const lines = fileContent.split('\n');
-        let test = bot.scoreboard.sidebar.items.map(item => item.displayName.getText(null).replace(item.name, '')).find(e => e.includes('Purse:') || e.includes('Piggy:'))
+        
+        
+        let test = bot.scoreboard.sidebar.items.map(item => item.displayName.getText(null).replace(item.name, '')).find(e => e.includes('Purse:') || e.includes('Piggy:'));
         let purse = test.replace('Purse: ', '').replace(/,/g, '');
         purse = formatNumber(Number(purse));
 
+        
         for (const line of lines) {
             const [key, value] = line.split('=');
-            if (key === 'buy_total') {
-                buyTotal = parseInt(value, 10);
-            } else if (key === 'sold_total') {
-                soldTotal = parseInt(value, 10);
+            switch (key) {
+                case 'buy_total':
+                    buyTotal = parseInt(value, 10);
+                    break;
+                case 'sold_total':
+                    soldTotal = parseInt(value, 10);
+                    break;
+                case 'flips_bed':
+                    flipsBedTotal = parseInt(value, 10);
+                    break;
+                case 'no_beds':
+                    noBedsTotal = parseInt(value, 10);
+                    break;
             }
         }
+
         
-        await webhookInterval(buyTotal, soldTotal, startSession, purse);
-    }, 30 * 60 * 1000);
+        await webhookInterval(buyTotal, soldTotal, flipsBedTotal, noBedsTotal, startSession, purse);
+    }, 30 * 60 * 1000); 
 }
-updateSession(0, 0);
+
+updateSession(0, 0, 0, 0);
 
 export function changeWebsocketURL(newURL: string) {
     _websocket.onclose = () => {}

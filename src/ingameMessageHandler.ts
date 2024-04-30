@@ -4,16 +4,6 @@ import { clickWindow, getWindowTitle } from './utils'
 import { ChatMessage } from 'prismarine-chat'
 import { sendWebhookItemSold } from './webhookHandler'
 import { getCurrentWebsocket } from './BAF'
-const fs = require('fs');
-const path = require('path');
-
-let buy_total = 0;  
-let sold_total = 0;
-
-function updateFile() {
-    const filePath = path.join(__dirname, 'totals.txt');
-    fs.writeFileSync(filePath, `buy_total=${buy_total}\nsold_total=${sold_total}`);
-}
 
 let errorTimeout
 
@@ -23,18 +13,8 @@ export async function registerIngameMessageHandler(bot: MyBot) {
         let text = message.getText(null)
         if (type == 'chat') {
             printMcChatToConsole(message.toAnsi())
-            if (text.startsWith('You purchased')) {
-                buy_total += 1;
-                setTimeout(() => {
-                    updateFile()
-                }, 100)
-            }
             if (text.startsWith('[Auction]') && text.includes('bought') && text.includes('for')) {
                 log('New item sold')
-                sold_total += 1;
-                setTimeout(() => {
-                    updateFile()
-                }, 100)
                 claimSoldItem(bot)
 
                 sendWebhookItemSold(

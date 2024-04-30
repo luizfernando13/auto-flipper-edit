@@ -243,7 +243,7 @@ export function SendWebhookTotals(buyTotal: number, soldTotal: number): void {
     })
 }
 
-export function webhookInterval(buyTotal: number, soldTotal: number, startedSession: string, purse: string): void {
+export function webhookInterval(buyTotal: number, soldTotal: number, flipsBedTotal: number, noBedsTotal: number, startedSession: string, purse: string): void {
     if (!isWebhookConfigured()) {
       return;
     }
@@ -258,6 +258,8 @@ export function webhookInterval(buyTotal: number, soldTotal: number, startedSess
           fields: [
             { name: 'Items purchased:', value: `\`\`\`${buyTotal}\`\`\`` , inline: false},
             { name: 'Items sold:', value: `\`\`\`${soldTotal}\`\`\``, inline: false},
+            { name: 'Winned Flips that are beds:', value: `\`\`\`${flipsBedTotal}\`\`\``, inline: false},
+            { name: 'Winned Flips that not are beds:', value: `\`\`\`${noBedsTotal}\`\`\``, inline: false},
             { name: 'Purse:', value: `\`\`\`${purse}\`\`\``, inline: false},
             { name: 'Session Started at:', value: `<t:${startedSession}:f> // <t:${startedSession}:R>`, inline: false},
           ],
