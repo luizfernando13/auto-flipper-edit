@@ -5,6 +5,7 @@ import { log, printMcChatToConsole } from './logger'
 import { clickWindow, getWindowTitle, numberWithThousandsSeparators, sleep } from './utils'
 import { ChatMessage } from 'prismarine-chat'
 import { sendWebhookItemPurchased, sendWebhookItemPurchased100M } from './webhookHandler'
+import moment from 'moment';
 import { claimPurchased } from './ingameMessageHandler'
 const fs = require('fs');
 const path = require('path');
@@ -130,13 +131,12 @@ async function useRegularPurchase(bot: MyBot, isBed: boolean, flip: Flip) {
         let window1 = bot.currentWindow;
         let total_clicks = 0;
         if (isBed && title.toString().includes('BIN Auction View')) {
+            log(`Starting the bed loop... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}`)
             let items = window1.containerItems();
             bot.state = 'purchasing'
           
             // Filtrar o item 'black_stained_glass_pane'
             items = items.filter(item => item.name !== 'black_stained_glass_pane');
-          
-            let bedItem = items.find(item => item.name === 'red_bed');
             let potatoItem = items.find(item => item.name === 'potato');
           
             if (potatoItem) {
@@ -144,7 +144,7 @@ async function useRegularPurchase(bot: MyBot, isBed: boolean, flip: Flip) {
               return;
             }
             
-            while (bedItem && !title.toString().includes('Confirm Purchase') && !potatoItem) {
+            while (!title.toString().includes('Confirm Purchase') && !potatoItem) {
               await sleep(getConfigProperty('DELAY_BETWEEN_CLICKS'));
               clickWindow(bot, 31);
               total_clicks++;
@@ -172,18 +172,44 @@ async function useRegularPurchase(bot: MyBot, isBed: boolean, flip: Flip) {
                 }
               }
             }
-            printMcChatToConsole(`§f[§4BAF§f]: §l§6Clicked ${total_clicks} times on the bed.`);
+            log(`Finished the bed loop... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}`)
+            printMcChatToConsole(`§f[§4BAF§f]: §l§6Clicked ${total_clicks} times on the bed. ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}`);
             total_clicks = 0;
-          }
+        }
+
         if (title.toString().includes('BIN Auction View')) {
             clickWindow(bot, 31)
         }
+
         if (title.toString().includes('Confirm Purchase')) {
-            clickWindow(bot, 11);
-            bot.removeAllListeners('windowOpen');
-            bot.state = null;
-            notcoins = false;
-            return;
+            let startTime = Date.now();
+            let itemFound = false;
+
+            while (!itemFound) {
+                let items = window1.containerItems();
+                let item = items.find(item => item.name === 'green_terracotta');
+                if (item) {
+                    log(`Starting the Confirm button... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}`);
+        
+                    clickWindow(bot, 11);
+                    await sleep(20);
+                    clickWindow(bot, 11);
+                    await sleep(300);
+                    clickWindow(bot, 11);
+
+                    bot.removeAllListeners('windowOpen');
+                    bot.state = null;
+                    itemFound = true;
+        
+                    let endTime = Date.now();
+                    let duration = endTime - startTime;
+                    log(`Finished the Confirm button... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}. Tempo total: ${duration} ms`);
+
+                    return;
+                } else {
+                    await sleep(10);
+                }
+            }
         }
     })
 }

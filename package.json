@@ -16,6 +16,7 @@
     "axios": "^0.27.2",
     "json2toml": "^4.0.1",
     "mineflayer": "^4.10.0",
+    "moment": "^2.30.1",
     "prompt-sync": "^4.2.0",
     "toml": "^3.0.0",
     "winston": "^3.8.2",
