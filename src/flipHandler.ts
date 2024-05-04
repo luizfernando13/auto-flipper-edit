@@ -192,20 +192,25 @@ async function useRegularPurchase(bot: MyBot, isBed: boolean, flip: Flip) {
                     log(`Starting the Confirm button... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}`);
         
                     clickWindow(bot, 11);
-                    await sleep(20);
-                    clickWindow(bot, 11);
-                    await sleep(300);
-                    clickWindow(bot, 11);
-
-                    bot.removeAllListeners('windowOpen');
-                    bot.state = null;
-                    itemFound = true;
-        
-                    let endTime = Date.now();
-                    let duration = endTime - startTime;
-                    log(`Finished the Confirm button... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}. Tempo total: ${duration} ms`);
-
-                    return;
+                    try {
+                        await sleep(2);
+                        clickWindow(bot, 11);
+                        await sleep(20);
+                        clickWindow(bot, 11);
+    
+                        bot.removeAllListeners('windowOpen');
+                        bot.state = null;
+                        itemFound = true;
+            
+                        let endTime = Date.now();
+                        let duration = endTime - startTime;
+                        log(`Finished the Confirm button... ${moment().format('ddd MMM DD YYYY HH:mm:ss.SSS [GMT]ZZ')}. Tempo total: ${duration} ms`);
+    
+                        return;
+                    }
+                    catch (error) {
+                        return printMcChatToConsole(`Error in the try ${error}`);
+                    }
                 } else {
                     await sleep(10);
                 }
