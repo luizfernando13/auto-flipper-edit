@@ -6,7 +6,7 @@ import { clickWindow, isCoflChatMessage, removeMinecraftColorCodes, sleep } from
 import { onWebsocketCreateAuction } from './sellHandler'
 import { tradePerson } from './tradeHandler'
 import { swapProfile } from './swapProfileHandler'
-import { flipHandler, registerIngameMessage } from './flipHandler'
+import { flipHandler, registerIngameMessage, onItemWhitelistedMessage } from './flipHandler'
 import { claimSoldItem, registerIngameMessageHandler } from './ingameMessageHandler'
 import { MyBot, TextMessageData } from '../types/autobuy'
 import { getConfigProperty, initConfigHelper, updatePersistentConfigProperty } from './configHelper'
@@ -20,7 +20,7 @@ const WebSocket = require('ws')
 var prompt = require('prompt-sync')()
 initConfigHelper()
 initLogger()
-const version = '1.5.1-af'
+const version = 'af-2.0.0'
 let _websocket: WebSocket
 let ingameName = getConfigProperty('INGAME_NAME');
 
@@ -105,6 +105,10 @@ async function onWebsocketMessage(msg) {
             flipHandler(bot, data)
             break
         case 'chatMessage':
+            if (data.length > 1 && data[1].text.includes('matched your Whitelist entry:') && !isCoflChatMessage(data[1].text)) {
+                onItemWhitelistedMessage(data[1].text)
+            }
+
             for (let da of [...(data as TextMessageData[])]) {
                 let isCoflChat = isCoflChatMessage(da.text)
                 if (da.text.startsWith("Your") && da.text.includes("connection id is")) {

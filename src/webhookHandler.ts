@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getConfigProperty } from './configHelper'
+import { FlipWhitelistedData } from '../types/autobuy'
 
 function sendWebhookData(options: Partial<Webhook>): void {
     let data = {
@@ -46,12 +47,12 @@ export function sendWebhookInitialized(ID: string) {
     })
 }
 
-export function sendWebhookItemPurchased(itemName: string, price: string, profit: string) {
+export function sendWebhookItemPurchased(itemName: string, price: string, profit: string, whitelistedData: FlipWhitelistedData) {
     if (!isWebhookConfigured()) {
         return
     }
     let ingameName = getConfigProperty('INGAME_NAME')
-    sendWebhookData({
+    let webhookData = {
         embeds: [
             {
                 title: 'Item Purchased',
@@ -71,21 +72,36 @@ export function sendWebhookItemPurchased(itemName: string, price: string, profit
                         name: 'Estimated Profit:',
                         value: `\`\`\`${profit}\`\`\``,
                         inline: false,
-                    },
-                    { name:' ', value:`<t:${(Date.now() / 1000).toFixed(0)}:R>`, inline: false}
+                    }
                 ],
                 thumbnail: { url: `https://minotar.net/helm/${ingameName}/600.png` },
             }
         ]
-    })
+    }
+    
+    if (whitelistedData) {
+        webhookData.embeds[0].fields.push({
+            name: 'Whitelist match:',
+            value: `\`\`\`${whitelistedData.reason}\n\n\nFound by: ${whitelistedData.finder}\`\`\``,
+            inline: false
+        })
+    }
+
+    webhookData.embeds[0].fields.push({
+        name: ' ',
+        value: `<t:${(Date.now() / 1000).toFixed(0)}:R>`,
+        inline: false
+    });
+
+    sendWebhookData(webhookData)
 }
 
-export function sendWebhookItemPurchased100M(itemName: string, price: string, profit: string) {
+export function sendWebhookItemPurchased100M(itemName: string, price: string, profit: string, whitelistedData: FlipWhitelistedData) {
     if (!isWebhookConfigured()) {
         return
     }
     let ingameName = getConfigProperty('INGAME_NAME')
-    sendWebhookData({
+    let webhookData = {
         embeds: [
             {
                 title: 'Legendary Flip!',
@@ -105,8 +121,7 @@ export function sendWebhookItemPurchased100M(itemName: string, price: string, pr
                         name: 'Estimated Profit:',
                         value: `\`\`\`${profit}\`\`\``,
                         inline: false,
-                    },
-                    { name:' ', value:`<t:${(Date.now() / 1000).toFixed(0)}:R>`, inline: false}
+                    }
                 ],
                 thumbnail: { url: `https://minotar.net/helm/${ingameName}/600.png` },
                 footer: {
@@ -115,7 +130,22 @@ export function sendWebhookItemPurchased100M(itemName: string, price: string, pr
                   }
             }
         ]
-    })
+    }
+    if (whitelistedData) {
+        webhookData.embeds[0].fields.push({
+            name: 'Whitelist match:',
+            value: `\`\`\`${whitelistedData.reason}\n\n\nFound by: ${whitelistedData.finder}\`\`\``,
+            inline: false
+        })
+    }
+
+    webhookData.embeds[0].fields.push({
+        name: ' ',
+        value: `<t:${(Date.now() / 1000).toFixed(0)}:R>`,
+        inline: false
+    });
+
+    sendWebhookData(webhookData)
 }
 
 export function sendWebhookItemSold(itemName: string, price: string, purchasedBy: string) {

@@ -1,8 +1,8 @@
-import { Flip, MyBot } from '../types/autobuy'
+import { Flip, MyBot, FlipWhitelistedData } from '../types/autobuy'
 import { getConfigProperty } from './configHelper'
 import { getFastWindowClicker } from './fastWindowClick'
 import { log, printMcChatToConsole } from './logger'
-import { clickWindow, getWindowTitle, numberWithThousandsSeparators, sleep } from './utils'
+import { clickWindow, getWindowTitle, numberWithThousandsSeparators, removeMinecraftColorCodes, sleep } from './utils'
 import { ChatMessage } from 'prismarine-chat'
 import { sendWebhookItemPurchased, sendWebhookItemPurchased100M } from './webhookHandler'
 import moment from 'moment';
@@ -17,6 +17,7 @@ let flips_bed = 0;
 let no_beds = 0;
 let buy_total = 0;  
 let sold_total = 0;
+let whitelistedData = null
 
 
 function updateTotalsFile() {
@@ -41,6 +42,9 @@ export function registerIngameMessage(bot: MyBot) {
                 setTimeout(() => {
                     updateTotalsFile()
                 }, 100)
+                let itemName = text.split(' purchased ')[1].split(' for ')[0]
+                let price = text.split(' for ')[1].split(' coins!')[0].replace(/,/g, '')
+                whitelistedData = getWhitelistedData(itemName, price)
             }
             if (text.startsWith('[Auction]') && text.includes('bought') && text.includes('for')) {
                 sold_total += 1;
@@ -103,7 +107,6 @@ export async function flipHandler(bot: MyBot, flip: Flip) {
             let parts = result.split(".");
             let formattedValue = parts[0];
             let numericValue = Number(formattedValue.replace(/,/g, ''));
-
             if (isBed) {
                 flips_bed += 1
                 updateTotalsFile();
@@ -112,13 +115,13 @@ export async function flipHandler(bot: MyBot, flip: Flip) {
                 no_beds += 1
                 updateTotalsFile();
             }
-            if (numericValue < 100000000){
-                sendWebhookItemPurchased(globalText.split(' purchased ')[1].split(' for ')[0], 
-                globalText.split(' for ')[1].split(' coins!')[0], `${"+" + formattedValue}`)
+            if (numericValue < 100000000) {
+                sendWebhookItemPurchased(globalText.split(' purchased ')[1].split(' for ')[0],
+                    globalText.split(' for ')[1].split(' coins!')[0], `${"+" + formattedValue}`, whitelistedData);
             }
             if (numericValue >= 100000000) {
-                sendWebhookItemPurchased100M(globalText.split(' purchased ')[1].split(' for ')[0], 
-                globalText.split(' for ')[1].split(' coins!')[0], `${"+" + formattedValue}`)
+                sendWebhookItemPurchased100M(globalText.split(' purchased ')[1].split(' for ')[0],
+                    globalText.split(' for ')[1].split(' coins!')[0], `${"+" + formattedValue}`, whitelistedData);
             }
             globalText = '';
         }
@@ -200,4 +203,30 @@ async function useWindowSkipPurchase(flip: Flip, isBed: boolean) {
     }
     await sleep(getConfigProperty('FLIP_ACTION_DELAY'))
     getFastWindowClicker().clickConfirm(flip.startingBid, flip.itemName, lastWindowId + 2)
+}
+
+// Stores the last 3 whitelist messages so add it to the webhook message for purchased flips
+let whitelistObjects: FlipWhitelistedData[] = []
+export function onItemWhitelistedMessage(text: string) {
+    let chatMessage = removeMinecraftColorCodes(text);
+    let itemName = chatMessage.split(' for ')[0];
+    let price = chatMessage.split(' for ')[1].split(' matched your Whitelist entry: ')[0];
+    let secondPart = chatMessage.split(' matched your Whitelist entry: ')[1];
+    let reason = secondPart.split('\n')[0].trim();
+    let finder = secondPart.split('Found by ')[1];
+
+    whitelistObjects.unshift({
+        itemName: itemName,
+        reason: reason,
+        finder: finder,
+        price: price
+    });
+
+    if (whitelistObjects.length > 3) {
+        whitelistObjects.pop();
+    }
+}
+
+export function getWhitelistedData(itemName: string, price: string): FlipWhitelistedData | null {
+    return whitelistObjects.find(x => x.itemName === itemName && x.price === price) || null;
 }
